@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Task Reminder</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #1e1e2e;
+      color: #ffffff;
+      text-align: center;
+      padding: 20px;
+      background-image: url('https://images.unsplash.com/photo-1538370965046-79c0d6907d47?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80');
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: rgba(46, 46, 62, 0.9);
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0px 0px 15px rgba(255, 255, 255, 0.1);
+    }
+    h1, h2 {
+      color: #ffffff;
+    }
+    input {
+      width: calc(100% - 22px);
+      padding: 10px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 5px;
+      background: #444;
+      color: white;
+    }
+    button {
+      width: calc(100% - 22px);
+      padding: 10px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 5px;
+      background: transparent;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s;
+      border: 1px solid white;
+    }
+    button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    li {
+      background: #333;
+      padding: 10px;
+      margin: 5px;
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .task-actions button {
+      background: transparent;
+      color: white;
+      border: 1px solid white;
+      padding: 5px 10px;
+      cursor: pointer;
+      border-radius: 5px;
+      transition: background 0.3s;
+    }
+    .task-actions button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Task Reminder</h1>
+  </header>
+  <div class="container">
+    <h2>Add a New Task</h2>
+    <form id="task-form">
+      <input type="text" name="task" placeholder="Task" required>
+      <input type="datetime-local" name="due" required>
+      <input type="text" name="chat_id" placeholder="Telegram Chat ID (optional)" value="{{ DEFAULT_CHAT_ID }}">
+      <button type="submit">Add Task</button>
+    </form>
+
+    <h2>Your Tasks</h2>
+    <ul id="task-list">
+      {% for task in tasks %}
+        <li id="task-{{ task.id }}">
+          <div>
+            <span>{{ task.task }}</span>
+            <p>Due: {{ task.due }} (Chat ID: {{ task.chat_id }})</p>
+          </div>
+          <div class="task-actions">
+            <button onclick="completeTask('{{ task.id }}')">✓</button>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <script>
+    document.getElementById("task-form").addEventListener("submit", function(event) {
+      event.preventDefault();
+      fetch("/add-task", {
+        method: "POST",
+        body: new FormData(this)
+      }).then(response => {
+        if (response.ok) {
+          alert("Task added successfully!");
+          location.reload();
+        } else {
+          alert("Error adding task.");
+        }
+      });
+    });
+
+    function completeTask(taskId) {
+      fetch("/complete-task", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task_id: taskId })
+      }).then(response => {
+        if (response.ok) {
+          alert("Task completed successfully!");
+          document.getElementById(`task-${taskId}`).remove();
+        } else {
+          alert("Error completing task.");
+        }
+      });
+    }
+  </script>
+</body>
+</html>
