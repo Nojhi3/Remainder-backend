@@ -1,18 +1,18 @@
 import asyncio
+import os
+import logging
+import requests
+import schedule
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Form, Request, Response, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-import os
+from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
-import schedule
-import requests
-from datetime import datetime, timedelta, timezone
-import logging
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -22,8 +22,15 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # FastAPI setup
-app = FastAPI()
 templates = Jinja2Templates(directory="templates")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handles startup and shutdown events"""
+    asyncio.create_task(run_scheduler())
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,6 +46,7 @@ if not DATABASE_URL:
     logger.error("DATABASE_URL is not set in environment variables")
     DATABASE_URL = "postgresql://user:password@postgres:5432/reminder_db"  # Fallback
 logger.info(f"Using DATABASE_URL: {DATABASE_URL}")
+
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -52,7 +60,6 @@ class Task(Base):
     telegram_message_id = Column(Integer, nullable=True)
 
 Base.metadata.create_all(engine)
-SessionLocal = sessionmaker(bind=engine)
 
 # Telegram API setup
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -64,13 +71,14 @@ class CompleteTaskRequest(BaseModel):
     task_id: int
 
 def send_telegram_reminder(task_id):
+    """Sends Telegram reminders for tasks"""
     logger.info(f"Checking reminder for task ID: {task_id}")
     with SessionLocal() as session:
         task = session.get(Task, task_id)
         if task:
             logger.info(f"Task found: {task.task}, Due: {task.due}, Chat ID: {task.chat_id}")
             
-            # Convert due time to UTC and subtract 4 hours
+            # Convert due time to UTC and adjust time difference
             task_due_utc = task.due.replace(tzinfo=timezone.utc) - timedelta(hours=5, minutes=30)
             current_time_utc = datetime.now(timezone.utc)
 
@@ -98,7 +106,7 @@ def send_telegram_reminder(task_id):
             jobs = schedule.get_jobs(tag=task_id)
             if jobs:
                 schedule.cancel_job(jobs[0])
-                
+
 @app.get("/test")
 async def test_endpoint():
     """ Test endpoint to verify if backend is running """
@@ -167,14 +175,6 @@ async def run_scheduler():
         schedule.run_pending()
         await asyncio.sleep(1)  # Non-blocking sleep
 
-@app.on_event("startup")
-async def startup_event():
-    """ Starts the scheduler on FastAPI startup """
-    asyncio.create_task(run_scheduler())
-
 if __name__ == "__main__":
-    import threading
-    threading.Thread(target=run_scheduler, daemon=True).start()
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)  # Change 'localhost' to '0.0.0.0'
-
+    uvicorn.run(app, host="0.0.0.0", port=5000)  # Ensures proper networking on Railway
